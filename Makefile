@@ -1,5 +1,5 @@
-CC=g++
-CFLAGS=-std=c++11 -Wall -pedantic -O2
+CC=gcc
+CFLAGS=-std=c99 -Wall -pedantic -g -Werror -Wextra -W
 LIBS=-lm
 
 all: bms1A bms1B
