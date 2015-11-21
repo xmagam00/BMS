@@ -1,36 +1,73 @@
-/*
+/* 
  * File:   bms1B.cpp
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include "sndfile.h"
+#include <cstdlib>
+#include <math.h>
+#include <vector>
+#include <fstream>
+#include <iostream>
+
+#include "sndfile.hh"
+
+//#define DEBUG
+
+#define AMPLITUDE (1.0 * 0x7F000000)
+
+using namespace std;
 
 
-#define PI 3.14159265358979323846
- #define AMPLITUDE (1.0 * 0x7F000000)
+void printHelp() {
+    cerr<<"Zadajte ako jediný parameter vstupný súbor"<<endl;
+}
 
-/*
- *
- */
-double addNormalize(double angle, double deltaAngle);
+/**
+ * Adding deltaAngle value to angle and normalizes it to arcsin definition scope.
+ * If the angle runs over the upper bound (M_PI/2), chandes deltaAngle to negative and if
+ * the angle runs over lower bound (-M_PI/2), changes deltaAngle to positive value.
+ * */
+double addNormalizeChangeDelta(double angle, double *deltaAngle) {
+    angle += *deltaAngle;
+    if (angle > M_PI/2) {
+        *deltaAngle = -*deltaAngle;
+        angle = M_PI/2 - (angle - M_PI/2);
+    } else if (angle < -M_PI/2) {
+        *deltaAngle = -*deltaAngle;
+        angle = -M_PI/2 - (angle + M_PI/2);
+    }
+    return angle;
+}
 
-double addAngle(double angle, double deltaAngle);
+/**
+ * Adding deltaAngle value to angle and normalizes it to arcsin definition scope.
+ * If the angle runs over the upper bound (M_PI/2).
+ * */
+double addNormalize(double angle, double deltaAngle) {
+    angle += deltaAngle;
+    if (angle > M_PI/2) {
+        angle = M_PI/2 - (angle - M_PI/2);
+    } else if (angle < -M_PI/2) {
+        angle = -M_PI/2 - (angle + M_PI/2);
+    }
+    return angle;
+}
 
-double addNormalizeChangeDelta(double angle, double *deltaAngle);
-
-
-char* process_input(int argc, char **argv);
-
-FILE *open_file (char *file_name);
-
-unsigned int close_file(FILE * fw);
-
-double addNormalizeChangeDelta(double angle, double *deltaAngle);
+/**
+ * Adds deltaAngle to the angle and normalizes it to <0, 2*M_PI> range
+ * */
+double addAngle(double angle, double deltaAngle) {
+    angle += deltaAngle;
+    int norm = angle/(2*M_PI);
+    angle -= (2*M_PI)*norm;
+    if (angle < 0) {
+        angle += 2*M_PI;
+    }
+    return angle;
+}
 
 int main(int argc, char** argv) {
 
-       if (argc != 2) {
+    if (argc != 2) {
         printHelp();
         return EXIT_FAILURE;
     }
@@ -56,17 +93,17 @@ int main(int argc, char** argv) {
     firstAngle = asin(((double)buffer[0]) / AMPLITUDE);
     deltaAngle = asin(((double)buffer[1]) / AMPLITUDE) - firstAngle;
     #ifdef DEBUG
-    cerr<<"deltaAngle: "<<deltaAngle<<" = "<<deltaAngle*180/PI<<"°"<<endl;
+    cerr<<"deltaAngle: "<<deltaAngle<<" = "<<deltaAngle*180/M_PI<<"°"<<endl;
     #endif
     double actAngle = firstAngle;
     double deltaX1 = deltaAngle;
     double deltaX4 = deltaAngle;
 
     /* QPSK bauds mapping values */
-    double expectedAngle1 = addAngle(0, 3*PI/4.0);
-    double expectedAngle2 = addAngle(0, PI/4.0);
-    double expectedAngle3 = addAngle(0, 5*PI/4.0);
-    double expectedAngle4 = addAngle(0, 7*PI/4.0);
+    double expectedAngle1 = addAngle(0, 3*M_PI/4.0);
+    double expectedAngle2 = addAngle(0, M_PI/4.0);
+    double expectedAngle3 = addAngle(0, 5*M_PI/4.0);
+    double expectedAngle4 = addAngle(0, 7*M_PI/4.0);
 
     int changes = 0;
     int firstChange = 0;
@@ -79,11 +116,11 @@ int main(int argc, char** argv) {
     while (changes < 3) {
         #ifdef DEBUG
         cerr<<"loop: "<<thirdChange<<endl;
-        cerr<<"actAngle: "<<actAngle<<" = "<<actAngle*180/PI<<"° "<<sin(actAngle)<<endl;
-        cerr<<"expected: "<<*expectedAngle<<" = "<<*expectedAngle*180/PI<<"° "<<sin(*expectedAngle)<<endl;
+        cerr<<"actAngle: "<<actAngle<<" = "<<actAngle*180/M_PI<<"° "<<sin(actAngle)<<endl;
+        cerr<<"expected: "<<*expectedAngle<<" = "<<*expectedAngle*180/M_PI<<"° "<<sin(*expectedAngle)<<endl;
         #endif
         /* we have a change in a baud */
-        if (!((actAngle > *expectedAngle - (PI/20))&&(actAngle < *expectedAngle + (PI/20)))) {
+        if (!((actAngle > *expectedAngle - (M_PI/20))&&(actAngle < *expectedAngle + (M_PI/20)))) {
             if (changes == 0) {
                 expectedAngle = &expectedAngle4b;
             } else if (changes == 1) {
@@ -206,71 +243,3 @@ int main(int argc, char** argv) {
     return EXIT_SUCCESS;
 }
 
-
-char* process_input(int argc, char **argv)
-{
-
-
-    //najprv testujeme, ci mame spravny pocet parametrov
-    if (argc == 2)
-    {
-        return argv[1];
-    }
-    return NULL;
-}
-
-FILE* open_file (char *file_name)
-{
-    FILE *fw = fopen (file_name, "r");
-    if (fw == NULL)
-    {
-        return NULL;
-    }
-    return fw;
-}
-
-void close_file(FILE * fw)
-{
-    fclose (fw);
-}
-
-
-
-double addNormalizeChangeDelta(double angle, double *deltaAngle) {
-    angle += *deltaAngle;
-    if (angle > PI/2) {
-        *deltaAngle = -*deltaAngle;
-        angle = PI/2 - (angle - PI/2);
-    } else if (angle < -PI/2) {
-        *deltaAngle = -*deltaAngle;
-        angle = -PI/2 - (angle + PI/2);
-    }
-    return angle;
-}
-
-/**
- * Adding deltaAngle value to angle and normalizes it to arcsin definition scope.
- * If the angle runs over the upper bound (PI/2).
- * */
-double addNormalize(double angle, double deltaAngle) {
-    angle += deltaAngle;
-    if (angle > PI/2) {
-        angle = PI/2 - (angle - PI/2);
-    } else if (angle < -PI/2) {
-        angle = -PI/2 - (angle + PI/2);
-    }
-    return angle;
-}
-
-/**
- * Adds deltaAngle to the angle and normalizes it to <0, 2*PI> range
- * */
-double addAngle(double angle, double deltaAngle) {
-    angle += deltaAngle;
-    int norm = angle/(2*PI);
-    angle -= (2*PI)*norm;
-    if (angle < 0) {
-        angle += 2*PI;
-    }
-    return angle;
-}

@@ -1,138 +1,182 @@
-/* 
+/*
  * File:   bms1A.cpp
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 #include <string.h>
 
 #include "sndfile.h"
 
-
+#define SAMPLE_RATE 18000
 #define CHANELS 1
 #define FORMAT (SF_FORMAT_WAV | SF_FORMAT_PCM_24)
 #define AMPLITUDE (1.0 * 0x7F000000)
 #define FREQ (1000.0 / SAMPLE_RATE)
+#define BAUDS 30
+#define PI 3.141592653589793
 
-/*
- * 
- */
-enum ERRORS
+char* process_input(int argc, char **argv);
+
+FILE *open_file (char *file_name);
+
+void close_file(FILE * fw);
+
+double get_phase(char x1, char x2);
+
+int main(int argc, char** argv)
 {
-  ERR_ZERO=1,			//na vstupe bola zadana 0
-  ERR_NDIG,			//chyba pri citani znakov, znak nie je cislo
-  ERR_PARAM,			//chyba pri citani parametrov z konzole
-  NO_ERR,			//prebehlo bez chyby
-  ERR_OF ,			//doslo k preteceniu vstupu
-  NUL_INP,			//navratova hodnota funkcie read_variable v pripade, ze sa zada prazdni vstup
-  NO_ACT,			//pociatocna inicializacna hodnota pre strukturu funckiu iden_input
-  //chybny pocet parametrov na terminale
-};
+    char *file_name = (char*) malloc(50);
+    char *result = process_input(argc, argv);	//pom. premenna pre funkciu iden_input
 
-PARAM_STRUCT iden_input (int pocet_par, char **prep);
+    if (result == NULL)
+    {
+        fprintf (stderr, "Chyba v parametroch. Program ocakava ako len 1 parameter a to nazov suboru\n");
+        return EXIT_FAILURE;
+    }
+    char *e = strchr(result, '.');
+    int index = (int)(e - result);
+    strncpy(file_name, result, index);
 
-FILE *open_matrix (char *nazov_suboru, unsigned int *chyba);
+    FILE *fw = open_file(result);
 
-unsigned int close_matrix (FILE * fw);
-
-
-int main(int argc, char** argv) {
-	int sample_rate = 0;
-  char *file_name = (char*) malloc(50);
-  char *result = iden_input (argc, argv);	//pom. premenna pre funkciu iden_input
-  
-  if (result == NULL) {
-  	fprintf (stderr, "Chyba v parametroch. Program ocakava ako parameter len nazov suboru");
-  }
-  char *e = strchr(string, '.');
-  index = (int)(e - result);
-  strncpy(file_name, result, index);
-
-  FILE *fw = open_file(result);
-  
-  if (fw == NULL) {
-   fprintf (stderr, "Chyba pri otvarani suboru");	
-  }
-
-int znak;
- int hodnota = 0;
- int bits_length = 0;
- int *data = (int *)malloc(1200);
-  while ((znak = getc(fw)) != EOF)
-  {
-   if (!fscanf (fw, "%d", &hodnota)) {
-   	free(file_name);
-   	fprintf(stderr, "Chybne data vo vstupnom subore");
-   	return EXIT_ERROR;
-   }
-   if (hodnota != 0 || hodnota != 1) {
-   	free(file_name);
-   	fprintf(stderr, "Chybne data vo vstupnom subore");
-   	return EXIT_ERROR;
-   }
-   data[bits_length] = hodnota;
-   bits_length++;
-  }
-sample_rate = bits_length / 2;s
+    if (fw == NULL)
+    {
+        fprintf (stderr, "Chyba pri otvarani suboru\n");
+        return EXIT_FAILURE;
+    }
 
 
-    SndfileHandle outputFile;
-    int *buffer = (int *)malloc(sample_rate);
-    int frequency = 1000.0 / sample_rate;
-    
-    for (int i = 0; i < sample_rate; i+2) {
-    	int shift = 0;
-    	
-    	if (data[i] == 0 && data[i + 1] == 0) {
-    		shift = 1;
-    	} else if (data[i] == 0 && data[i + 1] == 1) {
-    		shift = 2;
-    	} else if (data[i] == 1 && data[i + 1] == 0) {
-    		shift = 3;
-    	} else if (data[i] == 1 && data[i + 1] == 1) {
-    		shift = 4;
-    	}
+    int znak;
 
-        buffer [i] = AMPLITUDE * sin(frequency * 2 * i * M_PI + shift);
-	
-	}
-    
-    outputFile = SndfileHandle(file_name, SFM_WRITE, FORMAT, CHANELS, sample_rate);
+    int bits_length = 0;
+    char *data = (char *)malloc(1200);
 
-    
-    outputFile.write(buffer, sample_rate);
-    outputFile.close();
+    while ((znak = getc(fw)) != EOF)
+    {
 
-    delete [] buffer;
+        if (znak == 48 || znak == 49)
+        {
+            data[bits_length] = znak;
+            bits_length++;
+        }
+        else if (znak != 10)
+        {
+            fprintf(stderr, "Chybne data v subore\n");
+            return EXIT_FAILURE;
+        }
+
+
+    }
+    if (bits_length  == 0)
+    {
+        fprintf(stderr, "Chyba: prazdny subor\n");
+        return EXIT_FAILURE;
+    }
+
+
+    if (bits_length % 2 == 1)
+    {
+        fprintf(stderr, "Chyba: neparny pocet vstupnych bitov\n");
+        return EXIT_FAILURE;
+    }
+    data[bits_length] = '0';
+    data[bits_length++] = '0';
+    data[bits_length++] = '1';
+    data[bits_length++] = '1';
+    data[bits_length++] = '0';
+    data[bits_length++] = '0';
+    data[bits_length++] = '1';
+    data[bits_length++] = '1';
+
+
+
+
+
+    int *buffer = (int *)malloc(BAUDS * (bits_length / 2));
+
+    int k = 0;
+    //printf("%d", bits_length);
+
+    for(int idx = 0; idx < bits_length; idx+=2)
+    {
+        double codeAngle = get_phase(data[idx], data[idx+1]);
+        for (int i = 0; i < BAUDS; i++)   // iterate through all sampls in a baud
+        {
+            buffer[k] = AMPLITUDE * sin(FREQ * 2 * k * PI + codeAngle);
+            k++;
+        }
+
+    }
+
+    SF_INFO sfinfo;
+
+    sfinfo.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+    sfinfo.channels = 1;
+    sfinfo.samplerate = SAMPLE_RATE;
+
+    SNDFILE* outputFile = sf_open(file_name, SFM_WRITE, &sfinfo);
+
+    sf_write_raw(outputFile, buffer, k);
+    free(buffer);
     return EXIT_SUCCESS;
 }
 
-char *file_name iden_input (int pocet_par, char **prep)
+char* process_input(int argc, char **argv)
 {
-  
-
-  //najprv testujeme, ci mame spravny pocet parametrov
-  if (pocet_par == 2)
+    //najprv testujeme, ci mame spravny pocet parametrov
+    if (argc == 2)
     {
-      return prep[1];
-    } 
-return NULL;
+        return argv[1];
+    }
+    return NULL;
 }
 
+//funkcia otvori subor a vrati handle
 FILE *open_file (char *file_name)
 {
-  FILE *fw = fopen (file_name, "r");
-  if (fw == NULL)
-  {
-    return NULL;
-  }
-  return fw;
+    FILE *fw = fopen (file_name, "r");
+    if (fw == NULL)
+    {
+        return NULL;
+    }
+    return fw;
 }
 
-unsigned int close_file(FILE * fw)
+//funkcia zavrie subor
+void close_file(FILE * fw)
 {
-  if (fclose (fw) == EOF)
-    return ERR_CLOSE;
-  else
-    return NO_ERR;
+    fclose (fw);
 }
+
+
+double get_phase(char x1, char x2)
+{
+    const int first_angle = 3 * PI / 4.0;
+    const int second_angle = PI / 4.0;
+    const int three_angle = 5 * PI / 4.0;
+    const int four_angle = 7 * PI / 4.0;
+    double shift = 0;
+
+    if (x1 == 0 && x2 == 0)
+    {
+        shift = first_angle;
+    }
+    else if (x1 == 0 && x2 == 1)
+    {
+        shift = second_angle;
+    }
+    else if (x1 == 1 && x2 == 0)
+    {
+        shift = three_angle;
+    }
+    else if (x1== 1 && x2 == 1)
+    {
+        shift = four_angle;
+    }
+    return shift;
+
+}
+
+
